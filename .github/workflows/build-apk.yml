@@ -1,0 +1,28 @@
+name: Build Lead Hunter V5.4 APK
+
+on:
+  push:
+    branches: ["lead-hunter-v54-native-build"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk ATI_Lead_Hunter_V5.4_NATIVE_FIXED.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ATI_Lead_Hunter_V5.4_NATIVE_FIXED
+          path: ATI_Lead_Hunter_V5.4_NATIVE_FIXED.apk
+          retention-days: 30
