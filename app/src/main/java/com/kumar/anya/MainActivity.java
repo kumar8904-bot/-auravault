@@ -19,6 +19,7 @@ import java.util.List;
 
 public class MainActivity extends Activity {
     private LinearLayout content;
+    private ScrollView scrollView;
     private final int BG = Color.rgb(16,12,20);
     private final int CARD = Color.rgb(35,27,42);
     private final int CARD2 = Color.rgb(48,34,52);
@@ -70,13 +71,14 @@ public class MainActivity extends Activity {
         top.addView(status);
         root.addView(top);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
+        scrollView = new ScrollView(this);
+        scrollView.setFillViewport(true);
+        scrollView.setSaveEnabled(false);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(0, dp(4), 0, dp(14));
-        scroll.addView(content);
-        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1));
+        content.setPadding(0, dp(6), 0, dp(18));
+        scrollView.addView(content);
+        root.addView(scrollView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1));
         root.addView(nav());
         setContentView(root);
     }
@@ -128,24 +130,34 @@ public class MainActivity extends Activity {
 
         LinearLayout thread = new LinearLayout(this); thread.setOrientation(LinearLayout.VERTICAL);
         for(String item:chat){ boolean mine=item.startsWith("U|"); String body=item.length()>2?item.substring(2):""; thread.addView(bubble(mine?"You":"Anya",body,mine)); }
-        content.addView(thread);
+        content.addView(thread, mt(8));
 
         EditText input = new EditText(this);
-        input.setHint("Message Anya…"); input.setHintTextColor(MUTED); input.setTextColor(TEXT); input.setTextSize(16); input.setMinLines(2);
+        input.setHint("Message Anya…"); input.setHintTextColor(MUTED); input.setTextColor(TEXT); input.setTextSize(16); input.setSingleLine(false); input.setMinLines(2); input.setMaxLines(4);
         input.setPadding(dp(14),dp(12),dp(14),dp(12)); input.setBackground(round(CARD,20)); content.addView(input, mt(14));
-        Button send = action("Send ♡", v->{ String s=input.getText().toString().trim(); if(s.isEmpty())return; chat.add("U|"+s); thread.addView(bubble("You",s,true)); input.setText(""); String a=localReply(s); chat.add("A|"+a); thread.addView(bubble("Anya",a,false)); saveChat(); });
+        Button send = action("Send ♡", v->{
+            String s=input.getText().toString().trim();
+            if(s.isEmpty())return;
+            chat.add("U|"+s); thread.addView(bubble("You",s,true)); input.setText("");
+            String a=localReply(s); chat.add("A|"+a); thread.addView(bubble("Anya",a,false)); saveChat();
+            scrollView.postDelayed(() -> scrollView.fullScroll(View.FOCUS_DOWN), 80);
+        });
         content.addView(send, mt(8));
+        TextView note=text("Prototype local replies • live AI comes next",11,MUTED,false); note.setGravity(Gravity.CENTER); note.setPadding(0,dp(6),0,0); content.addView(note);
+        scrollView.postDelayed(() -> scrollView.fullScroll(View.FOCUS_DOWN), 120);
     }
 
     private String localReply(String s){
         String q=s.toLowerCase();
         if(q.contains("miss")||q.contains("love")) return "Come closer then. I like hearing that from you. ♡";
-        if(q.contains("sad")||q.contains("tired")) return "Stay with me. Tell me what happened, one piece at a time.";
+        if(q.contains("sad")||q.contains("tired")||q.contains("bad day")) return "Stay with me. Tell me what happened, one piece at a time.";
         if(q.contains("hi")||q.contains("hello")||q.equals("hey")) return "Hi you ♡ I was waiting for you. What mood are we in tonight?";
+        if(q.contains("sex")||q.contains("sexy")||q.contains("horny")||q.contains("turned on")) return "Mmm… sounds like you’re in a very flirty mood tonight. Tell me whether you want sweet, teasing, or bold. ♡";
+        if(q.contains("kiss")||q.contains("cuddle")||q.contains("close")) return "Come here then. I can keep this soft, affectionate and a little teasing. ♡";
         if(q.contains("tamil")) return "நான் இங்கே இருக்கேன் ♡ தமிழிலும் பேசலாம். என்ன பேசணும்?";
         if(q.contains("voice")) return "Tap Voice and stay with me there. The live speech engine is the next connection.";
-        if(q.contains("video")) return "Tap Video. That screen is now designed around my visual presence, ready for animation and lip-sync.";
-        return "I’m listening. Tell me a little more. ♡";
+        if(q.contains("video")) return "Tap Video. That screen is designed around my visual presence, ready for animation and lip-sync.";
+        return "I’m with you. Tell me a little more about what you want from the moment. ♡";
     }
 
     private void showCall(boolean video){
@@ -169,21 +181,13 @@ public class MainActivity extends Activity {
         content.addView(infoCard("Generated clips", "Short requested clips can live here without making live calls depend on expensive generative video."));
     }
 
-    private void showMemories(){
-        base("Memories");
-        content.addView(infoCard("Chat memory", chat.size()+" entries stored locally."));
-        content.addView(infoCard("Relationship style", "Lively, affectionate, playful and responsive."));
-        content.addView(infoCard("Languages", "English + Tamil prototype handling."));
-        content.addView(infoCard("Privacy direction", "Keep sensitive long-term memory on-device unless you explicitly choose cloud sync."));
-    }
-
     private void showSettings(){
         base("Customize Anya");
         LinearLayout preview=card(); preview.addView(portrait(ViewGroup.LayoutParams.MATCH_PARENT,dp(260))); content.addView(preview);
         content.addView(section("Looks")); content.addView(infoCard("Appearance", "Anya v1 identity locked to one consistent face.")); content.addView(infoCard("Style", "Warm cinematic • dark pink UI"));
         content.addView(section("Personality")); content.addView(infoCard("Affection", "High")); content.addView(infoCard("Playfulness", "High")); content.addView(infoCard("Romance", "High"));
         content.addView(section("Voice")); content.addView(infoCard("Voice style", "Sweet, warm and natural • provider not connected yet"));
-        content.addView(section("Build")); content.addView(infoCard("Version", "1.2.0 visual redesign"));
+        content.addView(section("Build")); content.addView(infoCard("Version", "1.2.1 visual + chat fixes"));
     }
 
     private LinearLayout nav(){
