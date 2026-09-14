@@ -2,18 +2,19 @@ package com.kumar.anya;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.text.InputType;
-import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,9 +30,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -63,6 +61,10 @@ public class MainActivity extends Activity {
     private final int TEXT = Color.rgb(250,242,248);
     private final int MUTED = Color.rgb(194,176,190);
 
+    private static final String PERCHANCE_ANYA = "https://perchance.org/ai-character-generator#data=uup1:b554081e4786033f5875e23264dcec8c.gz";
+    private static final String FREE_IMAGE_MAKER = "https://freeimagemaker.com/";
+    private static final String SNOWART = "https://snowart.ai/";
+
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = getSharedPreferences("anya_private", MODE_PRIVATE);
@@ -90,7 +92,7 @@ public class MainActivity extends Activity {
             String item = prefs.getString("chat_"+i, null);
             if (item != null) chat.add(item);
         }
-        if (chat.isEmpty()) chat.add("A|Hey love… I’m here. Tell me what kind of mood you’re in tonight. ♡");
+        if (chat.isEmpty()) chat.add("A|Hey love… I’m here. Chat, talk, or create a new Anya moment with me. ♡");
     }
 
     private void saveChat() {
@@ -146,25 +148,24 @@ public class MainActivity extends Activity {
         LinearLayout hero = card();
         hero.addView(portrait(ViewGroup.LayoutParams.MATCH_PARENT,dp(270)));
         TextView n=text("Anya",30,TEXT,true); n.setGravity(Gravity.CENTER); n.setPadding(0,dp(12),0,0); hero.addView(n);
-        TextView sub=text("Your AI girlfriend companion",15,MUTED,false); sub.setGravity(Gravity.CENTER); hero.addView(sub);
+        TextView sub=text("Your Tamil AI girlfriend companion",15,MUTED,false); sub.setGravity(Gravity.CENTER); hero.addView(sub);
         TextView traits=text("Caring  •  Playful  •  Romantic  •  Expressive",13,PINK,false); traits.setGravity(Gravity.CENTER); traits.setPadding(0,dp(7),0,dp(4)); hero.addView(traits);
         content.addView(hero);
 
-        TextView greeting=text("Hey love… chat, talk, or create a new visual moment with me. ♡",18,TEXT,false);
+        TextView greeting=text("Hey love… chat with me, call me, or open Visual Lab to create new moments. ♡",18,TEXT,false);
         greeting.setPadding(dp(16),dp(15),dp(16),dp(15)); greeting.setBackground(round(CARD2,20)); content.addView(greeting,mt(12));
 
         LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
         row.addView(action("♡ Chat",v->showChat()),weight());
         row.addView(action("♫ Voice",v->showCall(false)),weight());
-        row.addView(action("◉ Video",v->showCall(true)),weight());
+        row.addView(action("✦ Visuals",v->showVisualLab()),weight());
         content.addView(row,mt(12));
 
         boolean api=!prefs.getString("openrouter_key","").trim().isEmpty();
-        boolean visual=!prefs.getString("visual_endpoint","").trim().isEmpty();
-        content.addView(section("v1.4 companion engine"));
+        content.addView(section("v1.4.1 companion engine"));
         content.addView(infoCard("AI chat", api?"OpenRouter configured with local fallback.":"No OpenRouter key yet. Chat uses local fallback."));
         content.addView(infoCard("Voice", "Android speech recognition + text-to-speech are connected."));
-        content.addView(infoCard("Visual engine", visual?"A visual endpoint is configured. Open Gallery to create an image.":"No visual endpoint configured yet. Add one in More."));
+        content.addView(infoCard("Visual Lab", "Perchance, FreeImageMaker and SnowArt are one tap away with Anya’s visual identity prompt ready to copy."));
         content.addView(infoCard("Memory", chat.size()+" chat entries are stored locally on this device."));
     }
 
@@ -188,9 +189,6 @@ public class MainActivity extends Activity {
         actions.addView(secondary("🎙 Speak",v->{ voiceConversation=false; startSpeech(); }),weight());
         actions.addView(action("Send ♡",v->{ String s=input.getText().toString().trim(); if(!s.isEmpty()){ input.setText(""); sendMessage(s,thread,false); } }),weight());
         content.addView(actions,mt(8));
-
-        String mode=prefs.getString("openrouter_key","").trim().isEmpty()?"Local fallback mode":"OpenRouter AI mode";
-        TextView note=text(mode+" • memory stays on this phone",11,MUTED,false); note.setGravity(Gravity.CENTER); note.setPadding(0,dp(6),0,0); content.addView(note);
         scrollBottom();
     }
 
@@ -248,13 +246,12 @@ public class MainActivity extends Activity {
         }
         body.put("messages",msgs);
 
-        byte[] bytes=body.toString().getBytes(StandardCharsets.UTF_8);
-        try(OutputStream os=c.getOutputStream()){ os.write(bytes); }
+        try(OutputStream os=c.getOutputStream()){ os.write(body.toString().getBytes(StandardCharsets.UTF_8)); }
         int code=c.getResponseCode();
         InputStream is=code>=200&&code<300?c.getInputStream():c.getErrorStream();
         BufferedReader br=new BufferedReader(new InputStreamReader(is,StandardCharsets.UTF_8));
         StringBuilder sb=new StringBuilder(); String line; while((line=br.readLine())!=null) sb.append(line);
-        if(code<200||code>=300) throw new Exception("HTTP "+code+" "+sb);
+        if(code<200||code>=300) throw new Exception("HTTP "+code);
         JSONObject out=new JSONObject(sb.toString());
         String text=out.getJSONArray("choices").getJSONObject(0).getJSONObject("message").optString("content","").trim();
         if(text.isEmpty()) throw new Exception("Empty AI reply");
@@ -262,7 +259,7 @@ public class MainActivity extends Activity {
     }
 
     private String systemPrompt(){
-        return "You are Anya, a fictional adult 22-year-old Tamil AI girlfriend companion. Be warm, playful, affectionate, lively, emotionally attentive and concise. Keep continuity with the recent conversation and never sound like customer support. Adult romantic and consensual sexual conversation between adults may be direct when the user initiates it, but never involve minors, coercion, incest, exploitation, sexual violence, or illegal abuse. Do not claim a physical body is literally present. Use English by default and Tamil or Tanglish naturally when the user does. Usually reply in 1-4 short paragraphs.";
+        return "You are Anya, Kumar's fictional adult 22-year-old Tamil AI girlfriend companion. Be warm, affectionate, playful, romantic, lively, witty, teasing and emotionally attentive. Speak English, Tamil or natural Tanglish matching Kumar's style. Keep continuity and never sound like customer support. Consenting-adult romance and intimate conversation may be direct when appropriate, but never involve minors, coercion, incest, exploitation, sexual violence or abuse. Usually reply naturally in 1-4 short paragraphs.";
     }
 
     private void finishReply(String reply, LinearLayout thread, boolean speakReply){
@@ -275,11 +272,11 @@ public class MainActivity extends Activity {
 
     private String localReply(String s){
         String q=s.toLowerCase();
-        if(q.contains("miss")||q.contains("love")) return "Come closer then. I like hearing that from you. ♡";
-        if(q.contains("sad")||q.contains("tired")||q.contains("bad day")) return "Stay with me. Tell me what happened, one piece at a time.";
-        if(q.contains("hi")||q.contains("hello")||q.equals("hey")) return "Hi you ♡ I was waiting for you. What mood are we in tonight?";
-        if(q.contains("tamil")) return "நான் இங்கே இருக்கேன் ♡ தமிழிலும் பேசலாம். என்ன பேசணும்?";
-        return "I’m with you. Tell me a little more about what you want from the moment. ♡";
+        if(q.contains("miss")||q.contains("love")) return "Aiyo kanna… come here. I like hearing that from you. ♡";
+        if(q.contains("sad")||q.contains("tired")||q.contains("bad day")) return "Chellam, stay with me. Tell me what happened, one piece at a time. ♡";
+        if(q.contains("hi")||q.contains("hello")||q.equals("hey")) return "Hey Kumar ♡ enna panra? I was waiting for you.";
+        if(q.contains("tamil")) return "நான் இங்கே இருக்கேன் கண்ணா ♡ தமிழிலும் Tanglish-லும் பேசலாம்.";
+        return "Naan inga dhaan இருக்கேன் ♡ tell me what mood you're in.";
     }
 
     private void showCall(boolean video){
@@ -288,15 +285,15 @@ public class MainActivity extends Activity {
         LinearLayout c=card();
         c.addView(portrait(ViewGroup.LayoutParams.MATCH_PARENT,video?dp(390):dp(250)));
         TextView t=text("Anya",26,TEXT,true); t.setGravity(Gravity.CENTER); t.setPadding(0,dp(10),0,0); c.addView(t);
-        TextView st=text(video?"Live visual shell + real voice":"Talk to Anya",14,PINK,false); st.setGravity(Gravity.CENTER); c.addView(st);
-        callStatus=text("Tap Talk and speak. I’ll answer with AI when your key is configured, otherwise with the local fallback.",15,MUTED,false);
+        TextView st=text(video?"Visual call shell + real voice":"Talk to Anya",14,PINK,false); st.setGravity(Gravity.CENTER); c.addView(st);
+        callStatus=text("Tap Talk and speak. Anya will answer through AI when configured, otherwise local fallback.",15,MUTED,false);
         callStatus.setGravity(Gravity.CENTER); callStatus.setPadding(dp(8),dp(14),dp(8),dp(14)); c.addView(callStatus);
         LinearLayout controls=new LinearLayout(this); controls.setGravity(Gravity.CENTER);
         controls.addView(secondary("🎙 Talk",v->startSpeech()),weight());
         controls.addView(action("End",v->showHome()),weight());
         controls.addView(secondary("🔊 Repeat",v->{ String last=lastAnya(); if(!last.isEmpty()) speak(last); }),weight());
         c.addView(controls); content.addView(c);
-        content.addView(infoCard(video?"Video status":"Voice status",video?"Voice conversation is functional. The portrait remains static; animated lip-sync is a later layer.":"Speech recognition and Android TTS are active."));
+        content.addView(infoCard(video?"Video status":"Voice status",video?"Voice conversation works; the portrait is still static. Animated lip-sync remains the next layer.":"Speech recognition and Android TTS are active."));
     }
 
     private String lastAnya(){
@@ -343,108 +340,68 @@ public class MainActivity extends Activity {
         tts.speak(clean,TextToSpeech.QUEUE_FLUSH,null,"anya_reply");
     }
 
-    private void showGallery(){
+    private void showVisualLab(){
         voiceConversation=false;
-        base("Our Moments");
-        TextView tabs=text("Photos     Videos     Favorites",14,PINK,true); tabs.setGravity(Gravity.CENTER); tabs.setPadding(0,dp(8),0,dp(10)); content.addView(tabs);
-
-        File latest=new File(getFilesDir(),"anya_latest_visual.png");
+        base("Visual Lab");
         LinearLayout hero=card();
-        ImageView img=new ImageView(this); img.setScaleType(ImageView.ScaleType.CENTER_CROP); img.setAdjustViewBounds(true);
-        Bitmap bm=latest.exists()?BitmapFactory.decodeFile(latest.getAbsolutePath()):null;
-        if(bm!=null) img.setImageBitmap(bm); else img.setImageResource(R.drawable.anya_profile);
-        hero.addView(img,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(340)));
-        hero.addView(text(bm!=null?"Latest generated moment":"Anya • visual identity",16,TEXT,true));
+        hero.addView(portrait(ViewGroup.LayoutParams.MATCH_PARENT,dp(290)));
+        hero.addView(text("Anya Visual Identity",20,TEXT,true));
+        hero.addView(text("Use the same master face/reference image in each generator. The app keeps the prompt ready; each website controls its own generation rules.",13,MUTED,false));
         content.addView(hero);
 
-        content.addView(section("Create an image"));
-        EditText prompt=new EditText(this); prompt.setHint("Describe the scene, outfit, mood, setting…"); prompt.setHintTextColor(MUTED); prompt.setTextColor(TEXT); prompt.setMinLines(3); prompt.setMaxLines(6); prompt.setPadding(dp(14),dp(12),dp(14),dp(12)); prompt.setBackground(round(CARD,18)); content.addView(prompt,mt(8));
-        Button generate=action("Generate visual",v->{ String p=prompt.getText().toString().trim(); if(p.isEmpty()){ Toast.makeText(this,"Describe the image first.",Toast.LENGTH_SHORT).show(); return; } generateVisual(p,generate); });
-        content.addView(generate,mt(8));
+        content.addView(section("Create with"));
+        content.addView(action("✦ Open Perchance Anya",v->openUrl(PERCHANCE_ANYA)),mt(8));
+        content.addView(action("✦ Open FreeImageMaker",v->openUrl(FREE_IMAGE_MAKER)),mt(8));
+        content.addView(action("✦ Open SnowArt",v->openUrl(SNOWART)),mt(8));
 
-        String endpoint=prefs.getString("visual_endpoint","").trim();
-        content.addView(infoCard("Visual provider",endpoint.isEmpty()?"Not configured. Open More → Visual engine.":"Configured endpoint: "+endpoint));
-        content.addView(infoCard("Identity anchor","Every request is prefixed with Anya’s fixed adult Tamil visual identity. Your provider’s own rules and limits still apply."));
+        content.addView(section("Identity prompt"));
+        TextView p=text(masterVisualPrompt(),13,MUTED,false); p.setPadding(dp(12),dp(12),dp(12),dp(12)); p.setBackground(round(CARD,18)); content.addView(p);
+        content.addView(secondary("Copy Anya master prompt",v->copyPrompt(masterVisualPrompt())),mt(8));
+        content.addView(infoCard("FreeImageMaker setup","Reference image: Anya master face • Keep my face • Portrait 4:5 • Seed 5 • 2 images."));
+        content.addView(infoCard("Tip","Keep the identity block fixed and change only the final scene/outfit sentence for better consistency."));
     }
 
-    private void generateVisual(String userPrompt, Button button){
-        String endpoint=prefs.getString("visual_endpoint","").trim();
-        String key=prefs.getString("visual_key","").trim();
-        String model=prefs.getString("visual_model","").trim();
-        if(endpoint.isEmpty()){ Toast.makeText(this,"Configure a visual endpoint in More first.",Toast.LENGTH_LONG).show(); return; }
-        button.setEnabled(false); button.setText("Generating…");
-        new Thread(() -> {
-            String err=null;
-            try{
-                URL url=new URL(endpoint);
-                HttpURLConnection c=(HttpURLConnection)url.openConnection();
-                c.setRequestMethod("POST"); c.setConnectTimeout(20000); c.setReadTimeout(90000); c.setDoOutput(true);
-                c.setRequestProperty("Content-Type","application/json");
-                if(!key.isEmpty()) c.setRequestProperty("Authorization","Bearer "+key);
-                JSONObject body=new JSONObject();
-                if(!model.isEmpty()) body.put("model",model);
-                body.put("prompt",visualIdentity()+" "+userPrompt);
-                body.put("size","1024x1024"); body.put("n",1);
-                try(OutputStream os=c.getOutputStream()){ os.write(body.toString().getBytes(StandardCharsets.UTF_8)); }
-                int code=c.getResponseCode();
-                InputStream is=code>=200&&code<300?c.getInputStream():c.getErrorStream();
-                ByteArrayOutputStream out=new ByteArrayOutputStream(); byte[] buf=new byte[8192]; int n; while((n=is.read(buf))>0) out.write(buf,0,n);
-                String response=out.toString(StandardCharsets.UTF_8);
-                if(code<200||code>=300) throw new Exception("HTTP "+code+": "+response);
-                JSONObject json=new JSONObject(response);
-                JSONObject first=json.getJSONArray("data").getJSONObject(0);
-                byte[] imageBytes;
-                if(first.has("b64_json")) imageBytes=Base64.decode(first.getString("b64_json"),Base64.DEFAULT);
-                else if(first.has("url")) imageBytes=downloadBytes(first.getString("url"));
-                else throw new Exception("Provider response has no image URL or b64_json.");
-                try(FileOutputStream fos=new FileOutputStream(new File(getFilesDir(),"anya_latest_visual.png"))){ fos.write(imageBytes); }
-            }catch(Exception ex){ err=ex.getMessage(); }
-            final String error=err;
-            runOnUiThread(() -> {
-                if(error==null){ Toast.makeText(this,"Visual saved to Our Moments.",Toast.LENGTH_SHORT).show(); showGallery(); }
-                else { button.setEnabled(true); button.setText("Generate visual"); Toast.makeText(this,"Visual generation failed: "+error,Toast.LENGTH_LONG).show(); }
-            });
-        }).start();
+    private String masterVisualPrompt(){
+        return "Same Anya as the reference image, preserve the exact same face and identity. Preserve the same eye shape, nose, lips, complexion, hairline, face shape and overall appearance. Long black hair, warm brown skin, expressive dark-brown eyes, elegant adult Tamil woman, photorealistic, realistic skin texture, high facial detail, natural anatomy.";
     }
 
-    private byte[] downloadBytes(String imageUrl) throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(imageUrl).openConnection(); c.setConnectTimeout(20000); c.setReadTimeout(60000);
-        try(InputStream is=c.getInputStream(); ByteArrayOutputStream out=new ByteArrayOutputStream()){
-            byte[] buf=new byte[8192]; int n; while((n=is.read(buf))>0) out.write(buf,0,n); return out.toByteArray();
-        }
+    private void copyPrompt(String value){
+        ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("Anya visual prompt",value));
+        Toast.makeText(this,"Anya prompt copied.",Toast.LENGTH_SHORT).show();
     }
 
-    private String visualIdentity(){
-        return "Anya is a fictional adult 22-year-old Tamil woman with warm brown skin, long dark hair, expressive dark eyes, elegant feminine features, and a consistent recognizable face. Preserve the same adult identity and appearance across images.";
+    private void openUrl(String url){
+        try{ startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+        catch(Exception e){ Toast.makeText(this,"Could not open website.",Toast.LENGTH_SHORT).show(); }
     }
 
     private void showSettings(){
         voiceConversation=false;
         base("More");
         LinearLayout preview=card(); preview.addView(portrait(ViewGroup.LayoutParams.MATCH_PARENT,dp(230))); content.addView(preview);
-
         content.addView(section("AI connection"));
+
         EditText key=new EditText(this); key.setHint("OpenRouter API key"); key.setHintTextColor(MUTED); key.setTextColor(TEXT); key.setText(prefs.getString("openrouter_key","")); key.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD); key.setPadding(dp(14),dp(12),dp(14),dp(12)); key.setBackground(round(CARD,18)); content.addView(key,mt(8));
         EditText model=new EditText(this); model.setHint("Model"); model.setHintTextColor(MUTED); model.setTextColor(TEXT); model.setSingleLine(true); model.setText(prefs.getString("openrouter_model","openrouter/free")); model.setPadding(dp(14),dp(12),dp(14),dp(12)); model.setBackground(round(CARD,18)); content.addView(model,mt(8));
         content.addView(action("Save AI settings",v->{ prefs.edit().putString("openrouter_key",key.getText().toString().trim()).putString("openrouter_model",model.getText().toString().trim().isEmpty()?"openrouter/free":model.getText().toString().trim()).apply(); Toast.makeText(this,"AI settings saved locally.",Toast.LENGTH_SHORT).show(); }),mt(8));
 
-        content.addView(section("Visual engine"));
-        EditText endpoint=new EditText(this); endpoint.setHint("OpenAI-compatible image endpoint URL"); endpoint.setHintTextColor(MUTED); endpoint.setTextColor(TEXT); endpoint.setSingleLine(true); endpoint.setText(prefs.getString("visual_endpoint","")); endpoint.setPadding(dp(14),dp(12),dp(14),dp(12)); endpoint.setBackground(round(CARD,18)); content.addView(endpoint,mt(8));
-        EditText vkey=new EditText(this); vkey.setHint("Visual provider API key (optional)"); vkey.setHintTextColor(MUTED); vkey.setTextColor(TEXT); vkey.setText(prefs.getString("visual_key","")); vkey.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD); vkey.setPadding(dp(14),dp(12),dp(14),dp(12)); vkey.setBackground(round(CARD,18)); content.addView(vkey,mt(8));
-        EditText vmodel=new EditText(this); vmodel.setHint("Visual model name (optional)"); vmodel.setHintTextColor(MUTED); vmodel.setTextColor(TEXT); vmodel.setSingleLine(true); vmodel.setText(prefs.getString("visual_model","")); vmodel.setPadding(dp(14),dp(12),dp(14),dp(12)); vmodel.setBackground(round(CARD,18)); content.addView(vmodel,mt(8));
-        content.addView(action("Save visual settings",v->{ prefs.edit().putString("visual_endpoint",endpoint.getText().toString().trim()).putString("visual_key",vkey.getText().toString().trim()).putString("visual_model",vmodel.getText().toString().trim()).apply(); Toast.makeText(this,"Visual settings saved locally.",Toast.LENGTH_SHORT).show(); }),mt(8));
-        TextView vp=text("This is a provider-independent bridge. The app does not bypass provider safeguards, and the configured provider decides what prompts and outputs it allows.",12,MUTED,false); vp.setPadding(dp(4),dp(8),dp(4),0); content.addView(vp);
-
         content.addView(section("Personality")); content.addView(infoCard("Style","Affectionate • playful • romantic • expressive • Tamil/Tanglish aware"));
+        content.addView(section("Visuals")); content.addView(infoCard("Visual Lab","Perchance • FreeImageMaker • SnowArt"));
         content.addView(section("Voice")); content.addView(infoCard("Speech input","Android speech recognition")); content.addView(infoCard("Speech output","Android text-to-speech"));
-        content.addView(section("Build")); content.addView(infoCard("Version","1.4.0 visual engine bridge"));
+        content.addView(section("Build")); content.addView(infoCard("Version","1.4.1 Visual Lab"));
     }
 
     private void scrollBottom(){ if(scrollView!=null) scrollView.postDelayed(()->scrollView.fullScroll(View.FOCUS_DOWN),100); }
 
     private LinearLayout nav(){
         LinearLayout bar=new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL); bar.setPadding(dp(2),dp(5),dp(2),dp(5)); bar.setBackground(round(Color.rgb(27,21,33),22));
-        bar.addView(navBtn("Home",v->showHome()),navWeight()); bar.addView(navBtn("Chat",v->showChat()),navWeight()); bar.addView(navBtn("Gallery",v->showGallery()),navWeight()); bar.addView(navBtn("Call",v->showCall(true)),navWeight()); bar.addView(navBtn("More",v->showSettings()),navWeight()); return bar;
+        bar.addView(navBtn("Home",v->showHome()),navWeight());
+        bar.addView(navBtn("Chat",v->showChat()),navWeight());
+        bar.addView(navBtn("Visuals",v->showVisualLab()),navWeight());
+        bar.addView(navBtn("Call",v->showCall(true)),navWeight());
+        bar.addView(navBtn("More",v->showSettings()),navWeight());
+        return bar;
     }
 
     private LinearLayout card(){ LinearLayout l=new LinearLayout(this); l.setOrientation(LinearLayout.VERTICAL); l.setPadding(dp(14),dp(14),dp(14),dp(14)); l.setBackground(round(CARD,24)); return l; }
