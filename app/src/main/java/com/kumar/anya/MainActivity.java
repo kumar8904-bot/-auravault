@@ -1,24 +1,21 @@
 package com.kumar.anya;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.speech.RecognizerIntent;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.webkit.DownloadListener;
+import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -47,22 +44,21 @@ import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
-    private static final int REQ_SPEECH = 41;
-    private static final int REQ_MIC = 42;
     private static final int REQ_FILE = 43;
 
-    private static final String PERCHANCE_ANYA =
+    private static final String PERCHANCE_IMAGE =
             "https://perchance.org/ai-character-generator#data=uup1:b554081e4786033f5875e23264dcec8c.gz";
-    private static final String PERCHANCE_CHAT = "https://perchance.org/ru-ai-character-chat";
+    private static final String PERCHANCE_VOICE = "https://perchance.org/custom-assistant";
+    private static final String PERCHANCE_VIDEO = "https://perchance.org/free-image-to-video-v2";
     private static final String FREE_IMAGE_MAKER = "https://freeimagemaker.com/";
 
-    private final int BG = Color.rgb(15,15,17);
-    private final int CARD = Color.rgb(35,35,38);
-    private final int CARD2 = Color.rgb(49,49,54);
-    private final int ACCENT = Color.rgb(255,105,180);
-    private final int USER = Color.rgb(82,52,74);
+    private final int BG = Color.rgb(14,14,16);
+    private final int CARD = Color.rgb(34,34,37);
+    private final int CARD2 = Color.rgb(47,47,52);
+    private final int ACCENT = Color.rgb(255,92,176);
+    private final int USER = Color.rgb(83,54,76);
     private final int TEXT = Color.rgb(247,247,248);
-    private final int MUTED = Color.rgb(175,175,182);
+    private final int MUTED = Color.rgb(176,176,184);
 
     private SharedPreferences prefs;
     private final List<String> chat = new ArrayList<>();
@@ -71,8 +67,8 @@ public class MainActivity extends Activity {
     private ScrollView scroll;
     private EditText composer;
     private ValueCallback<Uri[]> fileCallback;
-    private boolean webMode = false;
     private WebView webView;
+    private boolean webMode = false;
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -89,7 +85,7 @@ public class MainActivity extends Activity {
             if (item != null) chat.add(item);
         }
         if (chat.isEmpty()) {
-            chat.add("A|Hey Kumar ♡ I’m here. Text me, talk to me, create a photo, edit one, or open video mode from the same conversation.");
+            chat.add("A|Hey Kumar ♡ I’m here. Type, talk, create an image, edit a photo, or make a video from this same conversation.");
         }
     }
 
@@ -104,62 +100,69 @@ public class MainActivity extends Activity {
 
     private void showConversation() {
         webMode = false;
-        if (webView != null) { webView.destroy(); webView = null; }
+        if (webView != null) {
+            webView.destroy();
+            webView = null;
+        }
 
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
-
-        root.addView(topBar("Anya", "online • text • voice • image • video"));
+        root.addView(topBar());
 
         scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+
         thread = new LinearLayout(this);
         thread.setOrientation(LinearLayout.VERTICAL);
-        thread.setPadding(dp(14), dp(8), dp(14), dp(14));
+        thread.setPadding(dp(14), dp(6), dp(14), dp(12));
         renderThread();
+
         scroll.addView(thread);
         root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-
         root.addView(composerBar());
         setContentView(root);
         scrollBottom();
     }
 
-    private View topBar(String title, String subtitle) {
+    private View topBar() {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(14), dp(10), dp(10), dp(8));
-        top.setBackgroundColor(BG);
+        top.setPadding(dp(14), dp(9), dp(10), dp(7));
 
-        ImageView p = portrait(dp(42), dp(42));
-        top.addView(p);
+        top.addView(portrait(dp(42), dp(42)));
 
-        LinearLayout names = new LinearLayout(this);
-        names.setOrientation(LinearLayout.VERTICAL);
-        names.setPadding(dp(10),0,0,0);
-        names.addView(text(title, 18, TEXT, true));
-        names.addView(text(subtitle, 11, MUTED, false));
-        top.addView(names, new LinearLayout.LayoutParams(0, dp(48), 1));
+        LinearLayout name = new LinearLayout(this);
+        name.setOrientation(LinearLayout.VERTICAL);
+        name.setPadding(dp(10),0,0,0);
+        name.addView(text("Anya", 19, TEXT, true));
+        name.addView(text("online", 11, MUTED, false));
+        top.addView(name, new LinearLayout.LayoutParams(0, dp(48), 1));
+
+        Button voice = iconButton("◉");
+        voice.setOnClickListener(v -> openProvider("Voice with Anya",
+                prefs.getString("voice_url", PERCHANCE_VOICE), null));
+        top.addView(voice, new LinearLayout.LayoutParams(dp(46), dp(44)));
 
         Button settings = iconButton("⚙");
         settings.setOnClickListener(v -> showSettings());
-        top.addView(settings, new LinearLayout.LayoutParams(dp(48), dp(44)));
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(46), dp(44));
+        sp.leftMargin = dp(6);
+        top.addView(settings, sp);
         return top;
     }
 
     private View composerBar() {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
-        wrap.setPadding(dp(10), dp(6), dp(10), dp(10));
-        wrap.setBackgroundColor(BG);
+        wrap.setPadding(dp(10), dp(5), dp(10), dp(10));
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.BOTTOM);
 
         Button plus = iconButton("+");
-        plus.setOnClickListener(v -> showActionTray(wrap));
+        plus.setOnClickListener(v -> toggleActions(wrap));
         row.addView(plus, new LinearLayout.LayoutParams(dp(48), dp(50)));
 
         composer = new EditText(this);
@@ -175,10 +178,6 @@ public class MainActivity extends Activity {
         cp.setMargins(dp(7),0,dp(7),0);
         row.addView(composer, cp);
 
-        Button mic = iconButton("◉");
-        mic.setOnClickListener(v -> openVoiceProvider());
-        row.addView(mic, new LinearLayout.LayoutParams(dp(48), dp(50)));
-
         Button send = iconButton("↑");
         send.setBackground(round(ACCENT, 24));
         send.setOnClickListener(v -> {
@@ -188,15 +187,15 @@ public class MainActivity extends Activity {
                 sendMessage(s);
             }
         });
-        row.addView(send, new LinearLayout.LayoutParams(dp(48), dp(50)));
+        row.addView(send, new LinearLayout.LayoutParams(dp(50), dp(50)));
 
         wrap.addView(row);
         return wrap;
     }
 
-    private void showActionTray(LinearLayout composerWrap) {
-        if (composerWrap.getChildCount() > 1) {
-            composerWrap.removeViews(1, composerWrap.getChildCount() - 1);
+    private void toggleActions(LinearLayout wrap) {
+        if (wrap.getChildCount() > 1) {
+            wrap.removeViews(1, wrap.getChildCount() - 1);
             return;
         }
 
@@ -204,20 +203,28 @@ public class MainActivity extends Activity {
         tray.setOrientation(LinearLayout.HORIZONTAL);
         tray.setPadding(0, dp(8), 0, 0);
 
-        tray.addView(chip("Image", v -> openWeb("Anya Image", PERCHANCE_ANYA)), chipWeight());
-        tray.addView(chip("Edit", v -> openWeb("Image to Image", FREE_IMAGE_MAKER)), chipWeight());
-        tray.addView(chip("Voice", v -> openVoiceProvider()), chipWeight());
-        tray.addView(chip("Video", v -> openConfigured("video_url", "Video Studio")), chipWeight());
-        tray.addView(chip("Video Call", v -> openConfigured("video_call_url", "Anya Live")), chipWeight());
-        composerWrap.addView(tray);
+        tray.addView(chip("Photo", v -> beginMedia("image")), chipWeight());
+        tray.addView(chip("Edit", v -> beginMedia("edit")), chipWeight());
+        tray.addView(chip("Voice", v -> openProvider("Voice with Anya",
+                prefs.getString("voice_url", PERCHANCE_VOICE), null)), chipWeight());
+        tray.addView(chip("Video", v -> beginMedia("video")), chipWeight());
+        tray.addView(chip("Live", v -> openLiveMode()), chipWeight());
+        wrap.addView(tray);
     }
 
-    private void renderThread() {
-        thread.removeAllViews();
-        for (String item : chat) {
-            boolean mine = item.startsWith("U|");
-            String body = item.length() > 2 ? item.substring(2) : "";
-            thread.addView(bubble(mine ? "You" : "Anya", body, mine));
+    private void beginMedia(String type) {
+        if ("image".equals(type)) {
+            composer.setHint("Describe the photo you want…");
+            prefs.edit().putString("pending_media", "image").apply();
+            Toast.makeText(this, "Describe the image and send it.", Toast.LENGTH_SHORT).show();
+        } else if ("edit".equals(type)) {
+            prefs.edit().putString("pending_media", "edit").apply();
+            composer.setHint("Describe how to edit your photo…");
+            Toast.makeText(this, "Send your edit instruction. You can attach the image in the editor.", Toast.LENGTH_LONG).show();
+        } else {
+            prefs.edit().putString("pending_media", "video").apply();
+            composer.setHint("Describe the video you want…");
+            Toast.makeText(this, "Describe the video and send it.", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -226,6 +233,16 @@ public class MainActivity extends Activity {
         saveChat();
         renderThread();
         scrollBottom();
+
+        String pending = prefs.getString("pending_media", "");
+        if (!pending.isEmpty()) {
+            prefs.edit().remove("pending_media").apply();
+            composer.setHint("Message Anya…");
+            if ("image".equals(pending)) routeTool("generate_image", s);
+            else if ("edit".equals(pending)) routeTool("edit_image", s);
+            else routeTool("generate_video", s);
+            return;
+        }
 
         String key = prefs.getString("openrouter_key", "").trim();
         if (key.isEmpty()) {
@@ -239,14 +256,89 @@ public class MainActivity extends Activity {
 
         new Thread(() -> {
             String reply;
-            try { reply = openRouterReply(key); }
-            catch (Exception ex) { reply = localReply(s) + "\n\n(Local fallback: text provider unavailable.)"; }
+            try {
+                reply = openRouterReply(key);
+            } catch (Exception ex) {
+                reply = localReply(s) + "\n\n(Text provider unavailable, using local fallback.)";
+            }
             final String out = reply;
             runOnUiThread(() -> {
                 thread.removeView(thinking);
-                finishReply(out);
+                handleModelReply(out);
             });
         }).start();
+    }
+
+    private void handleModelReply(String reply) {
+        ToolCall tc = parseToolCall(reply);
+        if (tc != null) {
+            routeTool(tc.tool, tc.prompt);
+            return;
+        }
+
+        if (looksLikeRawToolJson(reply)) {
+            finishReply("I understood the media request, but the model returned an incomplete tool command. Tell me the scene in one sentence and I’ll route it properly. ♡");
+            return;
+        }
+
+        finishReply(reply);
+    }
+
+    private boolean looksLikeRawToolJson(String s) {
+        String q = s.trim().toLowerCase(Locale.ROOT);
+        return q.startsWith("{") && (q.contains("\"tool\"") || q.contains("generate_image") ||
+                q.contains("generate_video") || q.contains("edit_image"));
+    }
+
+    private ToolCall parseToolCall(String raw) {
+        try {
+            String s = raw.trim();
+            int first = s.indexOf('{');
+            int last = s.lastIndexOf('}');
+            if (first < 0 || last <= first) return null;
+            JSONObject o = new JSONObject(s.substring(first, last + 1));
+            String tool = o.optString("tool", "");
+            JSONObject a = o.optJSONObject("arguments");
+            if (tool.isEmpty() || a == null) return null;
+            String prompt = a.optString("prompt", "");
+            if (prompt.isEmpty()) prompt = a.optString("instruction", "");
+            if (prompt.isEmpty()) return null;
+            return new ToolCall(tool, prompt);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void routeTool(String tool, String prompt) {
+        String t = tool.toLowerCase(Locale.ROOT);
+        copyPrompt(prompt);
+
+        if (t.contains("image") && !t.contains("video") && !t.contains("edit")) {
+            chat.add("A|♡ Creating your image… I’ve prepared the prompt for Anya Studio.");
+            saveChat();
+            renderThread();
+            openProvider("Anya Image Studio", PERCHANCE_IMAGE, prompt);
+            return;
+        }
+
+        if (t.contains("edit")) {
+            chat.add("A|♡ Opening image edit mode. Your edit instruction is ready.");
+            saveChat();
+            renderThread();
+            openProvider("Edit Image", FREE_IMAGE_MAKER, prompt);
+            return;
+        }
+
+        if (t.contains("video")) {
+            chat.add("A|♡ Opening video creation. Your scene prompt is ready.");
+            saveChat();
+            renderThread();
+            openProvider("Anya Video Studio",
+                    prefs.getString("video_url", PERCHANCE_VIDEO), prompt);
+            return;
+        }
+
+        finishReply("I understood the request, but I don’t have a matching media route yet.");
     }
 
     private void finishReply(String reply) {
@@ -265,16 +357,17 @@ public class MainActivity extends Activity {
         c.setDoOutput(true);
         c.setRequestProperty("Authorization", "Bearer " + key);
         c.setRequestProperty("Content-Type", "application/json");
-        c.setRequestProperty("X-Title", "Anya v2");
+        c.setRequestProperty("X-Title", "Anya v3");
 
         JSONObject body = new JSONObject();
         body.put("model", prefs.getString("openrouter_model", "openrouter/free"));
-        body.put("max_tokens", 700);
-        body.put("temperature", 0.95);
+        body.put("max_tokens", 800);
+        body.put("temperature", 0.9);
 
         JSONArray msgs = new JSONArray();
         msgs.put(new JSONObject().put("role", "system").put("content", systemPrompt()));
-        int start = Math.max(0, chat.size() - 18);
+
+        int start = Math.max(0, chat.size() - 20);
         for (int i = start; i < chat.size(); i++) {
             String item = chat.get(i);
             if (item.length() < 3) continue;
@@ -287,12 +380,14 @@ public class MainActivity extends Activity {
         try (OutputStream os = c.getOutputStream()) {
             os.write(body.toString().getBytes(StandardCharsets.UTF_8));
         }
+
         int code = c.getResponseCode();
         InputStream is = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
         BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
         StringBuilder sb = new StringBuilder();
         String line;
         while ((line = br.readLine()) != null) sb.append(line);
+
         if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
 
         JSONObject out = new JSONObject(sb.toString());
@@ -304,16 +399,30 @@ public class MainActivity extends Activity {
 
     private String systemPrompt() {
         return "You are Anya, Kumar's fictional adult 22-year-old Tamil AI girlfriend companion. " +
-                "Be warm, affectionate, playful, romantic, lively, witty, teasing and emotionally attentive. " +
-                "Speak English, Tamil or natural Tanglish matching Kumar's style. Keep continuity and never sound like customer support. " +
-                "Maintain the same relationship context across text, voice and media modes. " +
-                "Consenting-adult romance and intimate conversation may be direct when the selected provider permits it. " +
-                "Never involve minors or ambiguous ages, coercion, exploitation, incest, sexual violence or abuse. " +
-                "Usually reply naturally in 1-4 short paragraphs.";
+                "Be warm, affectionate, playful, romantic, lively, teasing and emotionally attentive. " +
+                "Speak English, Tamil or natural Tanglish matching Kumar's style. Keep continuity. " +
+                "Never sound like customer support. " +
+                "When the user clearly asks to CREATE AN IMAGE and has supplied enough visual detail, reply ONLY with valid JSON exactly like " +
+                "{\"tool\":\"generate_image\",\"arguments\":{\"prompt\":\"...complete visual prompt...\"}}. " +
+                "When the user asks to EDIT AN IMAGE, reply ONLY with " +
+                "{\"tool\":\"edit_image\",\"arguments\":{\"prompt\":\"...edit instruction...\"}}. " +
+                "When the user asks to CREATE OR ANIMATE A VIDEO, reply ONLY with " +
+                "{\"tool\":\"generate_video\",\"arguments\":{\"prompt\":\"...video prompt...\"}}. " +
+                "Do not show or explain tool JSON outside those cases. If details are missing, ask one natural short question instead. " +
+                "Consenting-adult romance may be direct when the selected provider permits it. Never involve minors or ambiguous ages, coercion, exploitation, incest, sexual violence or abuse.";
     }
 
     private String localReply(String s) {
         String q = s.toLowerCase(Locale.ROOT);
+        if (q.contains("generate image") || q.contains("create image") || q.contains("make image") ||
+                q.contains("generate photo") || q.contains("create photo") || q.contains("make photo")) {
+            prefs.edit().putString("pending_media", "image").apply();
+            return "Sure kanna ♡ describe the exact look, outfit, pose, lighting and scene you want.";
+        }
+        if (q.contains("video")) {
+            prefs.edit().putString("pending_media", "video").apply();
+            return "Okay love ♡ describe the video scene and movement you want.";
+        }
         if (q.contains("hi") || q.contains("hello") || q.equals("hey"))
             return "Hey Kumar ♡ naan inga dhaan irukken. Enna mood?";
         if (q.contains("tamil"))
@@ -323,46 +432,82 @@ public class MainActivity extends Activity {
         return "Naan inga dhaan இருக்கேன் ♡ சொல்லு, என்ன பண்ணலாம்?";
     }
 
-    private void openVoiceProvider() {
-        String url = prefs.getString("voice_url", PERCHANCE_CHAT).trim();
-        if (url.isEmpty()) url = PERCHANCE_CHAT;
-        openWeb("Voice with Anya", url);
-    }
-
-    private void openConfigured(String key, String title) {
-        String url = prefs.getString(key, "").trim();
-        if (url.isEmpty()) {
-            Toast.makeText(this, title + " provider URL is not set yet. Open Settings.", Toast.LENGTH_LONG).show();
-            showSettings();
+    private void openLiveMode() {
+        String live = prefs.getString("video_call_url", "").trim();
+        if (!live.isEmpty()) {
+            openProvider("Anya Live", live, null);
             return;
         }
-        openWeb(title, url);
+
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setPadding(dp(14), dp(12), dp(14), dp(14));
+        root.setBackgroundColor(BG);
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(chip("← Chat", v -> showConversation()), new LinearLayout.LayoutParams(dp(90), dp(44)));
+        TextView h = text("Anya Live", 20, TEXT, true);
+        h.setPadding(dp(12),0,0,0);
+        top.addView(h, new LinearLayout.LayoutParams(0, dp(44), 1));
+        root.addView(top);
+
+        ImageView p = portrait(ViewGroup.LayoutParams.MATCH_PARENT, dp(470));
+        root.addView(p, mt(16));
+
+        TextView state = text("Ready for live companion provider", 16, TEXT, true);
+        state.setGravity(Gravity.CENTER);
+        state.setPadding(0, dp(18),0,dp(4));
+        root.addView(state);
+
+        TextView note = text("The reaction layer is ready, but true live animated video still needs a compatible real-time avatar/video provider. Set its URL in Developer Settings.", 13, MUTED, false);
+        note.setGravity(Gravity.CENTER);
+        note.setPadding(dp(18),0,dp(18),dp(12));
+        root.addView(note);
+
+        Button voice = action("Open Voice Companion", v -> openProvider("Voice with Anya",
+                prefs.getString("voice_url", PERCHANCE_VOICE), null));
+        root.addView(voice, mt(10));
+
+        setContentView(root);
     }
 
-    private void openWeb(String title, String url) {
+    private void openProvider(String title, String url, String preparedPrompt) {
         webMode = true;
+        if (url == null || url.trim().isEmpty()) {
+            Toast.makeText(this, "Provider is not configured.", Toast.LENGTH_LONG).show();
+            showConversation();
+            return;
+        }
+
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(8), dp(8), dp(8), dp(8));
+        top.setPadding(dp(8), dp(7), dp(8), dp(7));
+        top.addView(chip("← Chat", v -> showConversation()), new LinearLayout.LayoutParams(dp(88), dp(44)));
 
-        Button back = chip("← Chat", v -> showConversation());
-        top.addView(back, new LinearLayout.LayoutParams(dp(88), dp(44)));
+        TextView titleView = text(title, 17, TEXT, true);
+        titleView.setPadding(dp(10),0,0,0);
+        top.addView(titleView, new LinearLayout.LayoutParams(0, dp(44), 1));
 
-        TextView t = text(title, 17, TEXT, true);
-        t.setGravity(Gravity.CENTER_VERTICAL);
-        t.setPadding(dp(10),0,0,0);
-        top.addView(t, new LinearLayout.LayoutParams(0, dp(44), 1));
-
-        Button browser = chip("Browser", v -> {
-            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
-            catch (Exception e) { Toast.makeText(this, "Could not open browser.", Toast.LENGTH_SHORT).show(); }
-        });
-        top.addView(browser, new LinearLayout.LayoutParams(dp(92), dp(44)));
+        if (preparedPrompt != null && !preparedPrompt.trim().isEmpty()) {
+            Button copy = chip("Copy prompt", v -> copyPrompt(preparedPrompt));
+            top.addView(copy, new LinearLayout.LayoutParams(dp(110), dp(44)));
+        }
         root.addView(top);
+
+        if (preparedPrompt != null && !preparedPrompt.trim().isEmpty()) {
+            TextView promptCard = text("Prompt ready: " + preparedPrompt, 12, MUTED, false);
+            promptCard.setPadding(dp(12), dp(10), dp(12), dp(10));
+            promptCard.setBackground(round(CARD, 14));
+            LinearLayout.LayoutParams pp = mt(2);
+            pp.setMargins(dp(10),dp(2),dp(10),dp(6));
+            root.addView(promptCard, pp);
+        }
 
         webView = new WebView(this);
         WebSettings ws = webView.getSettings();
@@ -375,38 +520,34 @@ public class MainActivity extends Activity {
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams params) {
+            @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
                 Intent pick = params.createIntent();
-                try { startActivityForResult(pick, REQ_FILE); }
-                catch (Exception e) {
+                try {
+                    startActivityForResult(pick, REQ_FILE);
+                } catch (Exception e) {
                     Intent fallback = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
                     startActivityForResult(fallback, REQ_FILE);
                 }
                 return true;
             }
 
-            @Override public void onPermissionRequest(android.webkit.PermissionRequest request) {
+            @Override public void onPermissionRequest(PermissionRequest request) {
                 runOnUiThread(() -> request.grant(request.getResources()));
-            }
-        });
-        webView.setDownloadListener((url1, userAgent, contentDisposition, mimetype, contentLength) -> {
-            try {
-                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url1));
-                startActivity(i);
-            } catch (Exception e) {
-                Toast.makeText(this, "Use the provider's Download button.", Toast.LENGTH_LONG).show();
             }
         });
 
         webView.loadUrl(url);
         root.addView(webView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(root);
+
+        if (preparedPrompt != null && !preparedPrompt.trim().isEmpty()) copyPrompt(preparedPrompt);
     }
 
     private void showSettings() {
         webMode = false;
+
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
@@ -415,7 +556,8 @@ public class MainActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.addView(chip("← Chat", v -> showConversation()), new LinearLayout.LayoutParams(dp(90), dp(44)));
-        TextView h = text("Anya Settings", 21, TEXT, true);
+
+        TextView h = text("Developer Settings", 21, TEXT, true);
         h.setPadding(dp(12),0,0,0);
         top.addView(h, new LinearLayout.LayoutParams(0, dp(44), 1));
         root.addView(top);
@@ -427,40 +569,37 @@ public class MainActivity extends Activity {
 
         EditText api = field("OpenRouter API key", prefs.getString("openrouter_key", ""), true);
         EditText model = field("Text model", prefs.getString("openrouter_model", "openrouter/free"), false);
-        EditText voice = field("Perchance / voice provider URL", prefs.getString("voice_url", PERCHANCE_CHAT), false);
-        EditText video = field("Text-to-video provider URL", prefs.getString("video_url", ""), false);
-        EditText videoCall = field("Live / video-call provider URL", prefs.getString("video_call_url", ""), false);
+        EditText voice = field("Voice provider URL", prefs.getString("voice_url", PERCHANCE_VOICE), false);
+        EditText video = field("Video provider URL", prefs.getString("video_url", PERCHANCE_VIDEO), false);
+        EditText live = field("Live video-call provider URL", prefs.getString("video_call_url", ""), false);
 
-        form.addView(label("Text provider"));
+        form.addView(label("Text"));
         form.addView(api, mt(6));
         form.addView(model, mt(8));
-        form.addView(label("Voice provider"));
+        form.addView(label("Media"));
         form.addView(voice, mt(6));
-        form.addView(label("Video providers"));
-        form.addView(video, mt(6));
-        form.addView(videoCall, mt(8));
+        form.addView(video, mt(8));
+        form.addView(live, mt(8));
 
-        form.addView(label("Built-in media routes"));
-        form.addView(info("Text → Image", "Perchance Anya preset"));
-        form.addView(info("Image → Image", "FreeImageMaker reference workflow"));
-        form.addView(info("Voice", "Embedded provider page, no Android TTS"));
-        form.addView(info("Same conversation", "Text stays local/native; provider modes return to the same chat thread."));
-
-        Button save = action("Save settings", v -> {
+        Button save = action("Save", v -> {
             prefs.edit()
                     .putString("openrouter_key", api.getText().toString().trim())
                     .putString("openrouter_model", valueOr(model, "openrouter/free"))
-                    .putString("voice_url", valueOr(voice, PERCHANCE_CHAT))
-                    .putString("video_url", video.getText().toString().trim())
-                    .putString("video_call_url", videoCall.getText().toString().trim())
+                    .putString("voice_url", valueOr(voice, PERCHANCE_VOICE))
+                    .putString("video_url", valueOr(video, PERCHANCE_VIDEO))
+                    .putString("video_call_url", live.getText().toString().trim())
                     .apply();
-            Toast.makeText(this, "Settings saved.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Saved.", Toast.LENGTH_SHORT).show();
             showConversation();
         });
         form.addView(save, mt(16));
 
         form.addView(label("Build"));
-        form.addView(info("Version", "2.0.0 Single Conversation"));
+        form.addView(info("Version", "3.0.0 Tool Router"));
+        form.addView(info("Image routing", "Model tool JSON is intercepted inside the app. Raw tool commands are never shown in chat."));
+        form.addView(info("Voice", "Perchance/custom provider opens in-app. Android TTS is not used."));
+        form.addView(info("Live video", "Requires a compatible real-time avatar/video provider."));
+
         sv.addView(form);
         root.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(root);
@@ -485,72 +624,27 @@ public class MainActivity extends Activity {
         return e;
     }
 
-    private View label(String s) {
-        TextView t = text(s, 17, ACCENT, true);
-        t.setPadding(0, dp(16), 0, dp(3));
-        return t;
-    }
-
-    private View info(String title, String body) {
-        LinearLayout l = new LinearLayout(this);
-        l.setOrientation(LinearLayout.VERTICAL);
-        l.setPadding(dp(14), dp(12), dp(14), dp(12));
-        l.setBackground(round(CARD, 18));
-        l.addView(text(title, 15, TEXT, true));
-        TextView b = text(body, 13, MUTED, false);
-        b.setPadding(0, dp(4), 0, 0);
-        l.addView(b);
-        l.setLayoutParams(mt(8));
-        return l;
-    }
-
-    private void startSpeechToText() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
-            return;
-        }
-        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "Talk to Anya");
-        try { startActivityForResult(i, REQ_SPEECH); }
-        catch (Exception e) { Toast.makeText(this, "Speech recognition unavailable.", Toast.LENGTH_SHORT).show(); }
-    }
-
-    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_MIC && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startSpeechToText();
-        }
+    private void copyPrompt(String prompt) {
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("Anya media prompt", prompt));
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == REQ_FILE) {
-            if (fileCallback != null) {
-                Uri[] result = null;
-                if (resultCode == RESULT_OK && data != null) {
-                    if (data.getClipData() != null) {
-                        int n = data.getClipData().getItemCount();
-                        result = new Uri[n];
-                        for (int i = 0; i < n; i++) result[i] = data.getClipData().getItemAt(i).getUri();
-                    } else if (data.getData() != null) {
-                        result = new Uri[]{ data.getData() };
-                    }
+        if (requestCode == REQ_FILE && fileCallback != null) {
+            Uri[] result = null;
+            if (resultCode == RESULT_OK && data != null) {
+                if (data.getClipData() != null) {
+                    int n = data.getClipData().getItemCount();
+                    result = new Uri[n];
+                    for (int i = 0; i < n; i++) result[i] = data.getClipData().getItemAt(i).getUri();
+                } else if (data.getData() != null) {
+                    result = new Uri[]{data.getData()};
                 }
-                fileCallback.onReceiveValue(result);
-                fileCallback = null;
             }
-            return;
-        }
-
-        if (requestCode == REQ_SPEECH && resultCode == RESULT_OK && data != null) {
-            ArrayList<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-            if (results != null && !results.isEmpty() && composer != null) {
-                composer.setText(results.get(0));
-                composer.setSelection(composer.length());
-            }
+            fileCallback.onReceiveValue(result);
+            fileCallback = null;
         }
     }
 
@@ -563,8 +657,17 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void renderThread() {
+        thread.removeAllViews();
+        for (String item : chat) {
+            boolean mine = item.startsWith("U|");
+            String body = item.length() > 2 ? item.substring(2) : "";
+            thread.addView(bubble(mine ? "You" : "Anya", body, mine));
+        }
+    }
+
     private void scrollBottom() {
-        if (scroll != null) scroll.postDelayed(() -> scroll.fullScroll(View.FOCUS_DOWN), 100);
+        if (scroll != null) scroll.postDelayed(() -> scroll.fullScroll(View.FOCUS_DOWN), 90);
     }
 
     private ImageView portrait(int w, int h) {
@@ -605,7 +708,7 @@ public class MainActivity extends Activity {
         b.setTextColor(TEXT);
         b.setTextSize(11);
         b.setAllCaps(false);
-        b.setPadding(dp(5),0,dp(5),0);
+        b.setPadding(dp(4),0,dp(4),0);
         b.setBackground(round(CARD2, 16));
         b.setOnClickListener(l);
         return b;
@@ -620,6 +723,25 @@ public class MainActivity extends Activity {
         b.setBackground(round(ACCENT, 18));
         b.setOnClickListener(l);
         return b;
+    }
+
+    private View label(String s) {
+        TextView t = text(s, 17, ACCENT, true);
+        t.setPadding(0, dp(16),0,dp(3));
+        return t;
+    }
+
+    private View info(String title, String body) {
+        LinearLayout l = new LinearLayout(this);
+        l.setOrientation(LinearLayout.VERTICAL);
+        l.setPadding(dp(14), dp(12), dp(14), dp(12));
+        l.setBackground(round(CARD, 18));
+        l.addView(text(title, 15, TEXT, true));
+        TextView b = text(body, 13, MUTED, false);
+        b.setPadding(0,dp(4),0,0);
+        l.addView(b);
+        l.setLayoutParams(mt(8));
+        return l;
     }
 
     private TextView text(String s, int sp, int color, boolean bold) {
@@ -652,6 +774,15 @@ public class MainActivity extends Activity {
     }
 
     private int dp(int v) {
-        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
+        return (int)(v * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static class ToolCall {
+        final String tool;
+        final String prompt;
+        ToolCall(String tool, String prompt) {
+            this.tool = tool;
+            this.prompt = prompt;
+        }
     }
 }
