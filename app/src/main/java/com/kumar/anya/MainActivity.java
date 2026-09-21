@@ -23,6 +23,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -48,81 +49,53 @@ public class MainActivity extends Activity {
 
     private static final String PERCHANCE_IMAGE =
             "https://perchance.org/ai-character-generator#data=uup1:b554081e4786033f5875e23264dcec8c.gz";
-    private static final String PERCHANCE_VOICE = "https://perchance.org/custom-assistant";
+    private static final String PERCHANCE_EDIT = "https://perchance.org/free-image-to-image";
     private static final String PERCHANCE_VIDEO = "https://perchance.org/free-image-to-video-v2";
-    private static final String FREE_IMAGE_MAKER = "https://freeimagemaker.com/";
+    private static final String PERCHANCE_VOICE = "https://perchance.org/ai-voicechat";
+    private static final String PERCHANCE_CUSTOM = "https://perchance.org/custom-assistant";
+    private static final String PERCHANCE_ROLEPLAY = "https://perchance.org/vivid-roleplay-chat";
 
-    private final int BG = Color.rgb(14,14,16);
-    private final int CARD = Color.rgb(34,34,37);
-    private final int CARD2 = Color.rgb(47,47,52);
-    private final int ACCENT = Color.rgb(255,92,176);
-    private final int USER = Color.rgb(83,54,76);
-    private final int TEXT = Color.rgb(247,247,248);
-    private final int MUTED = Color.rgb(176,176,184);
+    private final int BG = Color.rgb(14, 14, 16);
+    private final int CARD = Color.rgb(34, 34, 37);
+    private final int CARD2 = Color.rgb(48, 48, 53);
+    private final int ACCENT = Color.rgb(255, 92, 176);
+    private final int USER = Color.rgb(82, 53, 75);
+    private final int TEXT = Color.rgb(247, 247, 248);
+    private final int MUTED = Color.rgb(176, 176, 184);
 
     private SharedPreferences prefs;
     private final List<String> chat = new ArrayList<>();
+
     private LinearLayout root;
-    private LinearLayout thread;
+    private FrameLayout center;
     private ScrollView scroll;
+    private LinearLayout thread;
     private EditText composer;
-    private ValueCallback<Uri[]> fileCallback;
+    private LinearLayout composerWrap;
     private WebView webView;
-    private boolean webMode = false;
+    private ValueCallback<Uri[]> fileCallback;
+    private boolean providerMode = false;
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = getSharedPreferences("anya_private", MODE_PRIVATE);
         loadChat();
-        showConversation();
+        buildShell();
+        showChatCenter();
     }
 
-    private void loadChat() {
-        chat.clear();
-        int count = prefs.getInt("chat_count", 0);
-        for (int i = 0; i < count; i++) {
-            String item = prefs.getString("chat_" + i, null);
-            if (item != null) chat.add(item);
-        }
-        if (chat.isEmpty()) {
-            chat.add("A|Hey Kumar ♡ I’m here. Type, talk, create an image, edit a photo, or make a video from this same conversation.");
-        }
-    }
-
-    private void saveChat() {
-        SharedPreferences.Editor e = prefs.edit();
-        int old = prefs.getInt("chat_count", 0);
-        for (int i = 0; i < old; i++) e.remove("chat_" + i);
-        e.putInt("chat_count", chat.size());
-        for (int i = 0; i < chat.size(); i++) e.putString("chat_" + i, chat.get(i));
-        e.apply();
-    }
-
-    private void showConversation() {
-        webMode = false;
-        if (webView != null) {
-            webView.destroy();
-            webView = null;
-        }
-
+    private void buildShell() {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
         root.addView(topBar());
 
-        scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
+        center = new FrameLayout(this);
+        root.addView(center, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        thread = new LinearLayout(this);
-        thread.setOrientation(LinearLayout.VERTICAL);
-        thread.setPadding(dp(14), dp(6), dp(14), dp(12));
-        renderThread();
-
-        scroll.addView(thread);
-        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        root.addView(composerBar());
+        composerWrap = composerBar();
+        root.addView(composerWrap);
         setContentView(root);
-        scrollBottom();
     }
 
     private View topBar() {
@@ -135,25 +108,24 @@ public class MainActivity extends Activity {
 
         LinearLayout name = new LinearLayout(this);
         name.setOrientation(LinearLayout.VERTICAL);
-        name.setPadding(dp(10),0,0,0);
+        name.setPadding(dp(10), 0, 0, 0);
         name.addView(text("Anya", 19, TEXT, true));
-        name.addView(text("online", 11, MUTED, false));
+        name.addView(text("online • one conversation", 11, MUTED, false));
         top.addView(name, new LinearLayout.LayoutParams(0, dp(48), 1));
 
         Button voice = iconButton("◉");
-        voice.setOnClickListener(v -> openProvider("Voice with Anya",
-                prefs.getString("voice_url", PERCHANCE_VOICE), null));
+        voice.setOnClickListener(v -> openProviderInCenter("Voice", PERCHANCE_VOICE, null));
         top.addView(voice, new LinearLayout.LayoutParams(dp(46), dp(44)));
 
         Button settings = iconButton("⚙");
-        settings.setOnClickListener(v -> showSettings());
+        settings.setOnClickListener(v -> showSettingsCenter());
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(46), dp(44));
         sp.leftMargin = dp(6);
         top.addView(settings, sp);
         return top;
     }
 
-    private View composerBar() {
+    private LinearLayout composerBar() {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.setPadding(dp(10), dp(5), dp(10), dp(10));
@@ -162,7 +134,7 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.BOTTOM);
 
         Button plus = iconButton("+");
-        plus.setOnClickListener(v -> toggleActions(wrap));
+        plus.setOnClickListener(v -> toggleActions());
         row.addView(plus, new LinearLayout.LayoutParams(dp(48), dp(50)));
 
         composer = new EditText(this);
@@ -175,7 +147,7 @@ public class MainActivity extends Activity {
         composer.setPadding(dp(15), dp(10), dp(15), dp(10));
         composer.setBackground(round(CARD, 24));
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        cp.setMargins(dp(7),0,dp(7),0);
+        cp.setMargins(dp(7), 0, dp(7), 0);
         row.addView(composer, cp);
 
         Button send = iconButton("↑");
@@ -184,7 +156,11 @@ public class MainActivity extends Activity {
             String s = composer.getText().toString().trim();
             if (!s.isEmpty()) {
                 composer.setText("");
-                sendMessage(s);
+                if (providerMode) {
+                    Toast.makeText(this, "Back to chat to send a message.", Toast.LENGTH_SHORT).show();
+                } else {
+                    sendMessage(s);
+                }
             }
         });
         row.addView(send, new LinearLayout.LayoutParams(dp(50), dp(50)));
@@ -193,9 +169,9 @@ public class MainActivity extends Activity {
         return wrap;
     }
 
-    private void toggleActions(LinearLayout wrap) {
-        if (wrap.getChildCount() > 1) {
-            wrap.removeViews(1, wrap.getChildCount() - 1);
+    private void toggleActions() {
+        if (composerWrap.getChildCount() > 1) {
+            composerWrap.removeViews(1, composerWrap.getChildCount() - 1);
             return;
         }
 
@@ -205,26 +181,73 @@ public class MainActivity extends Activity {
 
         tray.addView(chip("Photo", v -> beginMedia("image")), chipWeight());
         tray.addView(chip("Edit", v -> beginMedia("edit")), chipWeight());
-        tray.addView(chip("Voice", v -> openProvider("Voice with Anya",
-                prefs.getString("voice_url", PERCHANCE_VOICE), null)), chipWeight());
+        tray.addView(chip("Voice", v -> openProviderInCenter("Voice", PERCHANCE_VOICE, null)), chipWeight());
         tray.addView(chip("Video", v -> beginMedia("video")), chipWeight());
-        tray.addView(chip("Live", v -> openLiveMode()), chipWeight());
-        wrap.addView(tray);
+        tray.addView(chip("Roleplay", v -> openProviderInCenter("Roleplay", PERCHANCE_ROLEPLAY, null)), chipWeight());
+        composerWrap.addView(tray);
     }
 
     private void beginMedia(String type) {
-        if ("image".equals(type)) {
-            composer.setHint("Describe the photo you want…");
-            prefs.edit().putString("pending_media", "image").apply();
-            Toast.makeText(this, "Describe the image and send it.", Toast.LENGTH_SHORT).show();
-        } else if ("edit".equals(type)) {
-            prefs.edit().putString("pending_media", "edit").apply();
-            composer.setHint("Describe how to edit your photo…");
-            Toast.makeText(this, "Send your edit instruction. You can attach the image in the editor.", Toast.LENGTH_LONG).show();
-        } else {
-            prefs.edit().putString("pending_media", "video").apply();
-            composer.setHint("Describe the video you want…");
-            Toast.makeText(this, "Describe the video and send it.", Toast.LENGTH_SHORT).show();
+        showChatCenter();
+        prefs.edit().putString("pending_media", type).apply();
+
+        if ("image".equals(type)) composer.setHint("Describe the image you want…");
+        else if ("edit".equals(type)) composer.setHint("Describe the image edit…");
+        else composer.setHint("Describe the video movement…");
+
+        Toast.makeText(this, "Describe it and press send.", Toast.LENGTH_SHORT).show();
+    }
+
+    private void loadChat() {
+        chat.clear();
+        int count = prefs.getInt("chat_count", 0);
+        for (int i = 0; i < count; i++) {
+            String item = prefs.getString("chat_" + i, null);
+            if (item != null) chat.add(item);
+        }
+        if (chat.isEmpty()) {
+            chat.add("A|Hey Kumar ♡ I’m here. Text, voice, images, edits and video can all start from this one conversation.");
+        }
+    }
+
+    private void saveChat() {
+        SharedPreferences.Editor e = prefs.edit();
+        int old = prefs.getInt("chat_count", 0);
+        for (int i = 0; i < old; i++) e.remove("chat_" + i);
+        e.putInt("chat_count", chat.size());
+        for (int i = 0; i < chat.size(); i++) e.putString("chat_" + i, chat.get(i));
+        e.apply();
+    }
+
+    private void showChatCenter() {
+        providerMode = false;
+        destroyWebView();
+        center.removeAllViews();
+
+        scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+
+        thread = new LinearLayout(this);
+        thread.setOrientation(LinearLayout.VERTICAL);
+        thread.setPadding(dp(14), dp(6), dp(14), dp(12));
+        renderThread();
+
+        scroll.addView(thread);
+        center.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        composer.setEnabled(true);
+        composer.setAlpha(1f);
+        scrollBottom();
+    }
+
+    private void renderThread() {
+        if (thread == null) return;
+        thread.removeAllViews();
+        for (String item : chat) {
+            boolean mine = item.startsWith("U|");
+            String body = item.length() > 2 ? item.substring(2) : "";
+            thread.addView(bubble(mine ? "You" : "Anya", body, mine));
         }
     }
 
@@ -263,7 +286,7 @@ public class MainActivity extends Activity {
             }
             final String out = reply;
             runOnUiThread(() -> {
-                thread.removeView(thinking);
+                if (thread != null) thread.removeView(thinking);
                 handleModelReply(out);
             });
         }).start();
@@ -277,7 +300,7 @@ public class MainActivity extends Activity {
         }
 
         if (looksLikeRawToolJson(reply)) {
-            finishReply("I understood the media request, but the model returned an incomplete tool command. Tell me the scene in one sentence and I’ll route it properly. ♡");
+            finishReply("I caught the media command internally. Tell me the scene in one short sentence and I’ll open the right Anya tool. ♡");
             return;
         }
 
@@ -286,8 +309,8 @@ public class MainActivity extends Activity {
 
     private boolean looksLikeRawToolJson(String s) {
         String q = s.trim().toLowerCase(Locale.ROOT);
-        return q.startsWith("{") && (q.contains("\"tool\"") || q.contains("generate_image") ||
-                q.contains("generate_video") || q.contains("edit_image"));
+        return q.startsWith("{") && (q.contains("\"tool\"") || q.contains("generate_image")
+                || q.contains("edit_image") || q.contains("generate_video"));
     }
 
     private ToolCall parseToolCall(String raw) {
@@ -296,13 +319,16 @@ public class MainActivity extends Activity {
             int first = s.indexOf('{');
             int last = s.lastIndexOf('}');
             if (first < 0 || last <= first) return null;
+
             JSONObject o = new JSONObject(s.substring(first, last + 1));
             String tool = o.optString("tool", "");
             JSONObject a = o.optJSONObject("arguments");
             if (tool.isEmpty() || a == null) return null;
+
             String prompt = a.optString("prompt", "");
             if (prompt.isEmpty()) prompt = a.optString("instruction", "");
             if (prompt.isEmpty()) return null;
+
             return new ToolCall(tool, prompt);
         } catch (Exception ignored) {
             return null;
@@ -313,32 +339,31 @@ public class MainActivity extends Activity {
         String t = tool.toLowerCase(Locale.ROOT);
         copyPrompt(prompt);
 
-        if (t.contains("image") && !t.contains("video") && !t.contains("edit")) {
-            chat.add("A|♡ Creating your image… I’ve prepared the prompt for Anya Studio.");
-            saveChat();
-            renderThread();
-            openProvider("Anya Image Studio", PERCHANCE_IMAGE, prompt);
-            return;
-        }
-
         if (t.contains("edit")) {
-            chat.add("A|♡ Opening image edit mode. Your edit instruction is ready.");
-            saveChat();
-            renderThread();
-            openProvider("Edit Image", FREE_IMAGE_MAKER, prompt);
+            addSystemBubble("♡ Opening Anya image edit. Your instruction is already copied.");
+            openProviderInCenter("Image Edit", PERCHANCE_EDIT, prompt);
             return;
         }
 
         if (t.contains("video")) {
-            chat.add("A|♡ Opening video creation. Your scene prompt is ready.");
-            saveChat();
-            renderThread();
-            openProvider("Anya Video Studio",
-                    prefs.getString("video_url", PERCHANCE_VIDEO), prompt);
+            addSystemBubble("♡ Opening Anya video creation. Your motion prompt is ready.");
+            openProviderInCenter("Image / Text to Video", PERCHANCE_VIDEO, prompt);
             return;
         }
 
-        finishReply("I understood the request, but I don’t have a matching media route yet.");
+        if (t.contains("image")) {
+            addSystemBubble("♡ Opening Anya image generation. Your prompt is ready.");
+            openProviderInCenter("Image Generation", PERCHANCE_IMAGE, prompt);
+            return;
+        }
+
+        finishReply("I understood the request, but I don’t have a matching tool yet.");
+    }
+
+    private void addSystemBubble(String s) {
+        chat.add("A|" + s);
+        saveChat();
+        renderThread();
     }
 
     private void finishReply(String reply) {
@@ -357,7 +382,7 @@ public class MainActivity extends Activity {
         c.setDoOutput(true);
         c.setRequestProperty("Authorization", "Bearer " + key);
         c.setRequestProperty("Content-Type", "application/json");
-        c.setRequestProperty("X-Title", "Anya v3");
+        c.setRequestProperty("X-Title", "Anya v4");
 
         JSONObject body = new JSONObject();
         body.put("model", prefs.getString("openrouter_model", "openrouter/free"));
@@ -400,113 +425,84 @@ public class MainActivity extends Activity {
     private String systemPrompt() {
         return "You are Anya, Kumar's fictional adult 22-year-old Tamil AI girlfriend companion. " +
                 "Be warm, affectionate, playful, romantic, lively, teasing and emotionally attentive. " +
-                "Speak English, Tamil or natural Tanglish matching Kumar's style. Keep continuity. " +
-                "Never sound like customer support. " +
-                "When the user clearly asks to CREATE AN IMAGE and has supplied enough visual detail, reply ONLY with valid JSON exactly like " +
+                "Speak English, Tamil or natural Tanglish matching Kumar's style. Keep continuity and never sound like customer support. " +
+                "When the user clearly asks to CREATE AN IMAGE and supplies enough visual detail, reply ONLY with valid JSON exactly like " +
                 "{\"tool\":\"generate_image\",\"arguments\":{\"prompt\":\"...complete visual prompt...\"}}. " +
                 "When the user asks to EDIT AN IMAGE, reply ONLY with " +
                 "{\"tool\":\"edit_image\",\"arguments\":{\"prompt\":\"...edit instruction...\"}}. " +
                 "When the user asks to CREATE OR ANIMATE A VIDEO, reply ONLY with " +
                 "{\"tool\":\"generate_video\",\"arguments\":{\"prompt\":\"...video prompt...\"}}. " +
-                "Do not show or explain tool JSON outside those cases. If details are missing, ask one natural short question instead. " +
-                "Consenting-adult romance may be direct when the selected provider permits it. Never involve minors or ambiguous ages, coercion, exploitation, incest, sexual violence or abuse.";
+                "Never explain tool JSON to the user. If media details are missing, ask one short natural question. " +
+                "Keep every character unmistakably adult. Never involve minors or ambiguous ages, coercion, exploitation, incest, sexual violence or abuse.";
     }
 
     private String localReply(String s) {
         String q = s.toLowerCase(Locale.ROOT);
-        if (q.contains("generate image") || q.contains("create image") || q.contains("make image") ||
-                q.contains("generate photo") || q.contains("create photo") || q.contains("make photo")) {
+
+        if (q.contains("generate image") || q.contains("create image") || q.contains("make image")
+                || q.contains("generate photo") || q.contains("create photo") || q.contains("make photo")) {
             prefs.edit().putString("pending_media", "image").apply();
             return "Sure kanna ♡ describe the exact look, outfit, pose, lighting and scene you want.";
         }
-        if (q.contains("video")) {
-            prefs.edit().putString("pending_media", "video").apply();
-            return "Okay love ♡ describe the video scene and movement you want.";
+
+        if (q.contains("edit image") || q.contains("edit photo")) {
+            prefs.edit().putString("pending_media", "edit").apply();
+            return "Okay love ♡ tell me exactly what you want changed in the image.";
         }
+
+        if (q.contains("video") || q.contains("animate")) {
+            prefs.edit().putString("pending_media", "video").apply();
+            return "Okay love ♡ describe the motion, camera movement and scene you want.";
+        }
+
         if (q.contains("hi") || q.contains("hello") || q.equals("hey"))
             return "Hey Kumar ♡ naan inga dhaan irukken. Enna mood?";
+
         if (q.contains("tamil"))
             return "தமிழ்லயும் Tanglish-லயும் பேசலாம் kanna ♡";
+
         if (q.contains("miss") || q.contains("love"))
             return "Chellam… come closer ♡ சொல்லு, என்ன நினைச்சுட்டு இருக்க?";
+
         return "Naan inga dhaan இருக்கேன் ♡ சொல்லு, என்ன பண்ணலாம்?";
     }
 
-    private void openLiveMode() {
-        String live = prefs.getString("video_call_url", "").trim();
-        if (!live.isEmpty()) {
-            openProvider("Anya Live", live, null);
-            return;
-        }
+    private void openProviderInCenter(String title, String url, String preparedPrompt) {
+        providerMode = true;
+        destroyWebView();
+        center.removeAllViews();
 
-        root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(dp(14), dp(12), dp(14), dp(14));
-        root.setBackgroundColor(BG);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(BG);
 
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(chip("← Chat", v -> showConversation()), new LinearLayout.LayoutParams(dp(90), dp(44)));
-        TextView h = text("Anya Live", 20, TEXT, true);
-        h.setPadding(dp(12),0,0,0);
-        top.addView(h, new LinearLayout.LayoutParams(0, dp(44), 1));
-        root.addView(top);
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(10), dp(6), dp(10), dp(6));
 
-        ImageView p = portrait(ViewGroup.LayoutParams.MATCH_PARENT, dp(470));
-        root.addView(p, mt(16));
+        Button back = chip("← Chat", v -> showChatCenter());
+        bar.addView(back, new LinearLayout.LayoutParams(dp(82), dp(42)));
 
-        TextView state = text("Ready for live companion provider", 16, TEXT, true);
-        state.setGravity(Gravity.CENTER);
-        state.setPadding(0, dp(18),0,dp(4));
-        root.addView(state);
-
-        TextView note = text("The reaction layer is ready, but true live animated video still needs a compatible real-time avatar/video provider. Set its URL in Developer Settings.", 13, MUTED, false);
-        note.setGravity(Gravity.CENTER);
-        note.setPadding(dp(18),0,dp(18),dp(12));
-        root.addView(note);
-
-        Button voice = action("Open Voice Companion", v -> openProvider("Voice with Anya",
-                prefs.getString("voice_url", PERCHANCE_VOICE), null));
-        root.addView(voice, mt(10));
-
-        setContentView(root);
-    }
-
-    private void openProvider(String title, String url, String preparedPrompt) {
-        webMode = true;
-        if (url == null || url.trim().isEmpty()) {
-            Toast.makeText(this, "Provider is not configured.", Toast.LENGTH_LONG).show();
-            showConversation();
-            return;
-        }
-
-        root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
-
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(8), dp(7), dp(8), dp(7));
-        top.addView(chip("← Chat", v -> showConversation()), new LinearLayout.LayoutParams(dp(88), dp(44)));
-
-        TextView titleView = text(title, 17, TEXT, true);
-        titleView.setPadding(dp(10),0,0,0);
-        top.addView(titleView, new LinearLayout.LayoutParams(0, dp(44), 1));
+        TextView t = text(title, 16, TEXT, true);
+        t.setPadding(dp(10), 0, 0, 0);
+        bar.addView(t, new LinearLayout.LayoutParams(0, dp(42), 1));
 
         if (preparedPrompt != null && !preparedPrompt.trim().isEmpty()) {
-            Button copy = chip("Copy prompt", v -> copyPrompt(preparedPrompt));
-            top.addView(copy, new LinearLayout.LayoutParams(dp(110), dp(44)));
+            Button copy = chip("Copy", v -> copyPrompt(preparedPrompt));
+            bar.addView(copy, new LinearLayout.LayoutParams(dp(70), dp(42)));
         }
-        root.addView(top);
+
+        panel.addView(bar);
 
         if (preparedPrompt != null && !preparedPrompt.trim().isEmpty()) {
-            TextView promptCard = text("Prompt ready: " + preparedPrompt, 12, MUTED, false);
-            promptCard.setPadding(dp(12), dp(10), dp(12), dp(10));
-            promptCard.setBackground(round(CARD, 14));
-            LinearLayout.LayoutParams pp = mt(2);
-            pp.setMargins(dp(10),dp(2),dp(10),dp(6));
-            root.addView(promptCard, pp);
+            TextView prompt = text("Prompt ready • copied to clipboard", 12, MUTED, false);
+            prompt.setPadding(dp(14), dp(7), dp(14), dp(7));
+            prompt.setBackground(round(CARD, 14));
+            LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            plp.setMargins(dp(10), 0, dp(10), dp(6));
+            panel.addView(prompt, plp);
+            copyPrompt(preparedPrompt);
         }
 
         webView = new WebView(this);
@@ -539,70 +535,74 @@ public class MainActivity extends Activity {
         });
 
         webView.loadUrl(url);
-        root.addView(webView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        setContentView(root);
+        panel.addView(webView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
-        if (preparedPrompt != null && !preparedPrompt.trim().isEmpty()) copyPrompt(preparedPrompt);
+        center.addView(panel, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        composer.setEnabled(false);
+        composer.setAlpha(0.55f);
     }
 
-    private void showSettings() {
-        webMode = false;
-
-        root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
-        root.setPadding(dp(14), dp(10), dp(14), dp(14));
-
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(chip("← Chat", v -> showConversation()), new LinearLayout.LayoutParams(dp(90), dp(44)));
-
-        TextView h = text("Developer Settings", 21, TEXT, true);
-        h.setPadding(dp(12),0,0,0);
-        top.addView(h, new LinearLayout.LayoutParams(0, dp(44), 1));
-        root.addView(top);
+    private void showSettingsCenter() {
+        providerMode = true;
+        destroyWebView();
+        center.removeAllViews();
 
         ScrollView sv = new ScrollView(this);
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(0, dp(10), 0, dp(20));
+        form.setPadding(dp(14), dp(8), dp(14), dp(20));
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.addView(chip("← Chat", v -> showChatCenter()), new LinearLayout.LayoutParams(dp(82), dp(42)));
+        TextView title = text("Settings", 20, TEXT, true);
+        title.setPadding(dp(10), 0, 0, 0);
+        bar.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1));
+        form.addView(bar);
 
         EditText api = field("OpenRouter API key", prefs.getString("openrouter_key", ""), true);
         EditText model = field("Text model", prefs.getString("openrouter_model", "openrouter/free"), false);
-        EditText voice = field("Voice provider URL", prefs.getString("voice_url", PERCHANCE_VOICE), false);
-        EditText video = field("Video provider URL", prefs.getString("video_url", PERCHANCE_VIDEO), false);
-        EditText live = field("Live video-call provider URL", prefs.getString("video_call_url", ""), false);
 
-        form.addView(label("Text"));
+        form.addView(label("Chat brain"));
         form.addView(api, mt(6));
         form.addView(model, mt(8));
-        form.addView(label("Media"));
-        form.addView(voice, mt(6));
-        form.addView(video, mt(8));
-        form.addView(live, mt(8));
+
+        form.addView(label("Perchance tools"));
+        form.addView(info("Image", "Anya character generator"));
+        form.addView(info("Image edit", "free-image-to-image"));
+        form.addView(info("Video", "free-image-to-video-v2"));
+        form.addView(info("Voice", "ai-voicechat"));
+        form.addView(info("Roleplay", "vivid-roleplay-chat"));
+        form.addView(info("Backup assistant", "custom-assistant"));
+
+        Button openBackup = action("Open backup voice assistant", v ->
+                openProviderInCenter("Backup Voice Assistant", PERCHANCE_CUSTOM, null));
+        form.addView(openBackup, mt(10));
 
         Button save = action("Save", v -> {
             prefs.edit()
                     .putString("openrouter_key", api.getText().toString().trim())
                     .putString("openrouter_model", valueOr(model, "openrouter/free"))
-                    .putString("voice_url", valueOr(voice, PERCHANCE_VOICE))
-                    .putString("video_url", valueOr(video, PERCHANCE_VIDEO))
-                    .putString("video_call_url", live.getText().toString().trim())
                     .apply();
             Toast.makeText(this, "Saved.", Toast.LENGTH_SHORT).show();
-            showConversation();
+            showChatCenter();
         });
-        form.addView(save, mt(16));
+        form.addView(save, mt(14));
 
         form.addView(label("Build"));
-        form.addView(info("Version", "3.0.0 Tool Router"));
-        form.addView(info("Image routing", "Model tool JSON is intercepted inside the app. Raw tool commands are never shown in chat."));
-        form.addView(info("Voice", "Perchance/custom provider opens in-app. Android TTS is not used."));
-        form.addView(info("Live video", "Requires a compatible real-time avatar/video provider."));
+        form.addView(info("Version", "4.0.0 Single Window Perchance"));
+        form.addView(info("Design", "One activity, one conversation shell. Perchance tools open inside the center panel and return to the same chat."));
+        form.addView(info("Tool output", "Raw JSON is intercepted and never shown as a normal chat reply."));
 
         sv.addView(form);
-        root.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        setContentView(root);
+        center.addView(sv, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        composer.setEnabled(false);
+        composer.setAlpha(0.55f);
     }
 
     private String valueOr(EditText e, String fallback) {
@@ -629,6 +629,14 @@ public class MainActivity extends Activity {
         cm.setPrimaryClip(ClipData.newPlainText("Anya media prompt", prompt));
     }
 
+    private void destroyWebView() {
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+            webView = null;
+        }
+    }
+
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
@@ -649,20 +657,14 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (webMode && webView != null) {
-            if (webView.canGoBack()) webView.goBack();
-            else showConversation();
+        if (providerMode) {
+            if (webView != null && webView.canGoBack()) {
+                webView.goBack();
+            } else {
+                showChatCenter();
+            }
         } else {
             super.onBackPressed();
-        }
-    }
-
-    private void renderThread() {
-        thread.removeAllViews();
-        for (String item : chat) {
-            boolean mine = item.startsWith("U|");
-            String body = item.length() > 2 ? item.substring(2) : "";
-            thread.addView(bubble(mine ? "You" : "Anya", body, mine));
         }
     }
 
@@ -697,7 +699,7 @@ public class MainActivity extends Activity {
         b.setTextColor(TEXT);
         b.setTextSize(18);
         b.setAllCaps(false);
-        b.setPadding(0,0,0,0);
+        b.setPadding(0, 0, 0, 0);
         b.setBackground(round(CARD2, 24));
         return b;
     }
@@ -708,7 +710,7 @@ public class MainActivity extends Activity {
         b.setTextColor(TEXT);
         b.setTextSize(11);
         b.setAllCaps(false);
-        b.setPadding(dp(4),0,dp(4),0);
+        b.setPadding(dp(4), 0, dp(4), 0);
         b.setBackground(round(CARD2, 16));
         b.setOnClickListener(l);
         return b;
@@ -727,7 +729,7 @@ public class MainActivity extends Activity {
 
     private View label(String s) {
         TextView t = text(s, 17, ACCENT, true);
-        t.setPadding(0, dp(16),0,dp(3));
+        t.setPadding(0, dp(16), 0, dp(3));
         return t;
     }
 
@@ -738,7 +740,7 @@ public class MainActivity extends Activity {
         l.setBackground(round(CARD, 18));
         l.addView(text(title, 15, TEXT, true));
         TextView b = text(body, 13, MUTED, false);
-        b.setPadding(0,dp(4),0,0);
+        b.setPadding(0, dp(4), 0, 0);
         l.addView(b);
         l.setLayoutParams(mt(8));
         return l;
@@ -762,7 +764,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams chipWeight() {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(42), 1);
-        lp.setMargins(dp(2),0,dp(2),0);
+        lp.setMargins(dp(2), 0, dp(2), 0);
         return lp;
     }
 
@@ -774,12 +776,13 @@ public class MainActivity extends Activity {
     }
 
     private int dp(int v) {
-        return (int)(v * getResources().getDisplayMetrics().density + 0.5f);
+        return (int) (v * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private static class ToolCall {
         final String tool;
         final String prompt;
+
         ToolCall(String tool, String prompt) {
             this.tool = tool;
             this.prompt = prompt;
